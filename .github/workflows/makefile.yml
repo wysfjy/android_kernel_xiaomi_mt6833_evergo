@@ -1,14 +1,15 @@
-name: Auto Kernel Builer
+name: Auto Kernel Builder
+
 on:
-   push:
-      branches: [main,ksu]
-   workflow_dispatch:
+  push:
+    branches: [main,ksu]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
-      matrix: 
+      matrix:
         branch: ['main', 'ksu']
       fail-fast: false
     timeout-minutes: 45
@@ -58,7 +59,7 @@ jobs:
           zip \
           zlib1g-dev \
           gcc-aarch64-linux-gnu
-   
+
     - name: Set swap to 10G
       uses: pierotofy/set-swap-space@master
       with:
@@ -75,7 +76,7 @@ jobs:
       with:
         path: ${{ env.CCACHE_DIR }}
         key: kernel-ccache-${{ runner.os }}-${{ env.ARCH }}-${{ matrix.branch }}
-    
+
     - name: Build Kernel (ARM64 Cross-Compile)
       run: |
         make -j32 O=out \
@@ -122,4 +123,29 @@ jobs:
       with:
         path: ${{ env.CCACHE_DIR }}
         key: kernel-ccache-${{ runner.os }}-${{ env.ARCH }}-${{ matrix.branch }}-${{ github.run_id }}
-    
+
+    - name: Set release variables
+      id: vars
+      run: |
+        TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
+        TAG=build-${{ matrix.branch }}-${TIMESTAMP}
+        ZIP=AnyKernel3-${{ matrix.branch }}.zip
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "zip=$ZIP" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.vars.outputs.tag }}
+        release_name: ${{ steps.vars.outputs.tag }}
+        body: Automated build for branch ${{ matrix.branch }}
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ steps.vars.outputs.zip }}
+        asset_name: ${{ steps.vars.outputs.zip }}
+        asset_content_type: application/zip
